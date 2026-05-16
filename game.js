@@ -4,7 +4,9 @@
   const WIDTH = 420;
   const HEIGHT = 700;
   const SAVE_KEY = "shadowBoxSaveData";
+  const COMMUNITY_OWNER_KEY = `${SAVE_KEY}:communityOwnerKey`;
   const COMMUNITY_MANIFEST_PATH = "community-levels/community-levels.json";
+  const COMMUNITY_TABLE = "community_levels";
   const DEBUG_SHADOW_HITBOX = false;
 
   const LIGHT_CORE_RADIUS = 70;
@@ -256,7 +258,8 @@
       bestStarsByLevel: {},
       completedLevels: {},
       customLevels: [],
-      publishedLevels: []
+      publishedLevels: [],
+      publishedRemoteIds: []
     };
   }
 
@@ -276,7 +279,8 @@
       bestStarsByLevel: safe.bestStarsByLevel && typeof safe.bestStarsByLevel === "object" ? safe.bestStarsByLevel : {},
       completedLevels: safe.completedLevels && typeof safe.completedLevels === "object" ? safe.completedLevels : {},
       customLevels: Array.isArray(safe.customLevels) ? safe.customLevels.map(normalizeCustomLevel).filter(Boolean) : [],
-      publishedLevels: Array.isArray(safe.publishedLevels) ? safe.publishedLevels.map(normalizeCustomLevel).filter(Boolean) : []
+      publishedLevels: Array.isArray(safe.publishedLevels) ? safe.publishedLevels.map(normalizeCustomLevel).filter(Boolean) : [],
+      publishedRemoteIds: Array.isArray(safe.publishedRemoteIds) ? safe.publishedRemoteIds.map(String).filter(Boolean) : []
     };
   }
 
@@ -292,7 +296,8 @@
     saveData = {
       ...defaultSaveData(),
       customLevels: saveData.customLevels,
-      publishedLevels: saveData.publishedLevels
+      publishedLevels: saveData.publishedLevels,
+      publishedRemoteIds: saveData.publishedRemoteIds
     };
     saveProgress();
     renderLevelSelect();
@@ -1933,14 +1938,15 @@
     return level;
   }
 
-  function publishBuilderLevel() {
+  async function publishBuilderLevel() {
     const level = saveBuilderLevel({ silent: true });
     if (!level) {
       return;
     }
 
-    publishLevelImmediately(level);
-    setBuilderMessage("Published to Community Levels.");
+    if (await publishLevelImmediately(level)) {
+      setBuilderMessage("Published to Community Levels.");
+    }
   }
 
   function setBuilderMessage(text) {
@@ -2092,7 +2098,7 @@
 
     const entries = [
       ...localEntries,
-      ...communityLevels.map((entry) => ({ ...entry, source: "pack" }))
+      ...communityLevels.map((entry) => ({ ...entry, source: entry.source || "pack" }))
     ];
 
     if (entries.length === 0) {
@@ -2119,7 +2125,9 @@
       const actions = card.querySelector(".card-actions");
       if (entry.level) {
         addCardButton(actions, "Play", () => startCommunityLevel(entry.level));
-        addCardButton(actions, "Remove", () => removePublishedLevel(entry.id));
+        if (entry.canRemove || entry.source === "local") {
+          addCardButton(actions, "Remove", () => removePublishedLevel(entry.id));
+        }
       } else {
         addCardButton(actions, "Play", () => loadAndPlayCommunityLevel(entry));
       }
@@ -2137,7 +2145,8 @@
       difficulty: "Published",
       description: "Published from this browser.",
       level,
-      source: "local"
+      source: "local",
+      canRemove: true
     }));
   }
 
@@ -2150,31 +2159,72 @@
     communityLevelsError = "";
     renderCommunityLevels();
 
+    const loadedEntries = [];
+    const errors = [];
+
     try {
-      const response = await fetch(COMMUNITY_MANIFEST_PATH, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`Manifest request failed: ${response.status}`);
-      }
-
-      const manifest = await response.json();
-      const entries = Array.isArray(manifest) ? manifest : manifest?.levels;
-      if (!Array.isArray(entries)) {
-        throw new Error("Manifest is missing a levels list.");
-      }
-
-      communityLevels = entries
-        .map(normalizeCommunityEntry)
-        .filter(Boolean);
-      communityLevelsLoaded = true;
+      loadedEntries.push(...await loadStaticCommunityEntries());
     } catch (error) {
-      console.error(error);
-      communityLevels = [];
-      communityLevelsLoaded = false;
-      communityLevelsError = "Community levels could not be loaded.";
+      errors.push(error);
+    }
+
+    try {
+      loadedEntries.unshift(...await loadRemoteCommunityEntries());
+    } catch (error) {
+      errors.push(error);
+    }
+
+    try {
+      communityLevels = loadedEntries;
+      communityLevelsLoaded = true;
+      communityLevelsError = "";
+      if (loadedEntries.length === 0 && errors.length > 0) {
+        throw errors[0];
+      }
+    } catch (error) {
+      console.error(error, errors);
+      communityLevels = loadedEntries;
+      communityLevelsLoaded = loadedEntries.length > 0;
+      communityLevelsError = loadedEntries.length > 0 ? "" : "Community levels could not be loaded.";
     } finally {
       communityLevelsLoading = false;
       renderCommunityLevels();
     }
+  }
+
+  async function loadStaticCommunityEntries() {
+    const response = await fetch(COMMUNITY_MANIFEST_PATH, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Manifest request failed: ${response.status}`);
+    }
+
+    const manifest = await response.json();
+    const entries = Array.isArray(manifest) ? manifest : manifest?.levels;
+    if (!Array.isArray(entries)) {
+      throw new Error("Manifest is missing a levels list.");
+    }
+
+    return entries
+      .map(normalizeCommunityEntry)
+      .filter(Boolean);
+  }
+
+  async function loadRemoteCommunityEntries() {
+    if (!hasSupabaseCommunityConfig()) {
+      return [];
+    }
+
+    const rows = await supabaseRequest(
+      `${COMMUNITY_TABLE}?select=id,level_id,name,author,difficulty,description,level,created_at&order=created_at.desc&limit=100`
+    );
+
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    return rows
+      .map(normalizeRemoteCommunityEntry)
+      .filter(Boolean);
   }
 
   function normalizeCommunityEntry(entry, index) {
@@ -2188,6 +2238,24 @@
       difficulty: safeText(safe.difficulty, "Unknown Difficulty", 24),
       description: safeText(safe.description, "A shared Shadow Box level.", 140),
       file
+    };
+  }
+
+  function normalizeRemoteCommunityEntry(row) {
+    const level = normalizeCommunityLevel(row?.level, row || {});
+    if (!level || !row?.id) {
+      return null;
+    }
+
+    return {
+      id: String(row.id),
+      name: safeText(row.name || level.name, "Community Level", 40),
+      author: safeText(row.author, "Community Player", 40),
+      difficulty: safeText(row.difficulty, "Community", 24),
+      description: safeText(row.description || level.hint, "A shared Shadow Box level.", 140),
+      level,
+      source: "remote",
+      canRemove: saveData.publishedRemoteIds.includes(String(row.id))
     };
   }
 
@@ -2291,6 +2359,87 @@
     return (text || fallback).slice(0, maxLength);
   }
 
+  function communityConfig() {
+    const config = window.SHADOW_BOX_COMMUNITY || {};
+    return {
+      supabaseUrl: String(config.supabaseUrl || "").replace(/\/+$/, ""),
+      supabaseAnonKey: String(config.supabaseAnonKey || "").trim()
+    };
+  }
+
+  function hasSupabaseCommunityConfig() {
+    const config = communityConfig();
+    return Boolean(config.supabaseUrl && config.supabaseAnonKey);
+  }
+
+  async function supabaseRequest(path, options = {}) {
+    const config = communityConfig();
+    if (!config.supabaseUrl || !config.supabaseAnonKey) {
+      throw new Error("Supabase community config is missing.");
+    }
+
+    const response = await fetch(`${config.supabaseUrl}/rest/v1/${path}`, {
+      ...options,
+      headers: {
+        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.supabaseAnonKey}`,
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Supabase request failed: ${response.status}`);
+    }
+
+    if (response.status === 204) {
+      return null;
+    }
+
+    return response.json();
+  }
+
+  async function createRemoteCommunityLevel(level) {
+    const rows = await supabaseRequest(COMMUNITY_TABLE, {
+      method: "POST",
+      headers: {
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify({
+        level_id: safeText(level.id, `level-${Date.now()}`, 64),
+        name: safeText(level.name, "Community Level", 40),
+        author: "Player",
+        difficulty: "Community",
+        description: safeText(level.hint, "Published from Level Builder.", 140),
+        level,
+        owner_key: getCommunityOwnerKey()
+      })
+    });
+
+    return Array.isArray(rows) ? rows[0] : rows;
+  }
+
+  async function deleteRemoteCommunityLevel(id) {
+    return supabaseRequest("rpc/delete_community_level", {
+      method: "POST",
+      body: JSON.stringify({
+        p_id: id,
+        p_owner_key: getCommunityOwnerKey()
+      })
+    });
+  }
+
+  function getCommunityOwnerKey() {
+    const existing = storage.getItem(COMMUNITY_OWNER_KEY);
+    if (existing) {
+      return existing;
+    }
+
+    const generated = window.crypto?.randomUUID?.() || `owner-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    storage.setItem(COMMUNITY_OWNER_KEY, generated);
+    return generated;
+  }
+
   function addCardButton(parent, label, onClick) {
     const button = document.createElement("button");
     button.type = "button";
@@ -2339,20 +2488,21 @@
     }
   }
 
-  function publishCommunityLevel(level) {
-    if (publishLevelImmediately(level)) {
+  async function publishCommunityLevel(level) {
+    if (await publishLevelImmediately(level)) {
       setCustomMessage("Published to Community Levels.");
     }
   }
 
-  function publishLevelImmediately(level) {
-    if (!window.confirm("Publish this level to Community Levels on this device?")) {
+  async function publishLevelImmediately(level) {
+    if (!hasSupabaseCommunityConfig()) {
+      window.alert("Global publishing is not configured yet. Add your Supabase URL and anon key in community-config.js.");
       return false;
     }
 
     const published = normalizeCustomLevel({
       ...level,
-      id: `published-${level.id || Date.now()}`
+      id: String(level.id || `custom-${Date.now()}`)
     });
 
     if (!published) {
@@ -2360,28 +2510,58 @@
       return false;
     }
 
-    const existingIndex = saveData.publishedLevels.findIndex((savedLevel) => savedLevel.id === published.id);
-    if (existingIndex >= 0) {
-      saveData.publishedLevels[existingIndex] = published;
-    } else {
-      saveData.publishedLevels.unshift(published);
+    if (!window.confirm("Publish this level for everyone in Community Levels?")) {
+      return false;
     }
 
-    saveProgress();
-    renderCommunityLevels();
-    window.alert("Level published to Community Levels.");
-    return true;
+    try {
+      const inserted = await createRemoteCommunityLevel(published);
+      const remoteId = String(inserted.id || "");
+      if (remoteId && !saveData.publishedRemoteIds.includes(remoteId)) {
+        saveData.publishedRemoteIds.push(remoteId);
+      }
+
+      saveProgress();
+      communityLevelsLoaded = false;
+      await loadCommunityLevels(true);
+      showScreen(SCREENS.COMMUNITY_LEVELS);
+      setCommunityMessage("Level published for everyone.");
+      return true;
+    } catch (error) {
+      console.error(error);
+      window.alert("This level could not be published. Check the community database settings.");
+      return false;
+    }
   }
 
-  function removePublishedLevel(id) {
-    if (!window.confirm("Remove this published level from Community Levels on this device?")) {
+  async function removePublishedLevel(id) {
+    if (saveData.publishedLevels.some((level) => level.id === id)) {
+      if (!window.confirm("Remove this local published level from this browser?")) {
+        return;
+      }
+
+      saveData.publishedLevels = saveData.publishedLevels.filter((level) => level.id !== id);
+      saveProgress();
+      renderCommunityLevels();
+      setCommunityMessage("Published level removed.");
       return;
     }
 
-    saveData.publishedLevels = saveData.publishedLevels.filter((level) => level.id !== id);
-    saveProgress();
-    renderCommunityLevels();
-    setCommunityMessage("Published level removed.");
+    if (!window.confirm("Remove this published level from Community Levels for everyone?")) {
+      return;
+    }
+
+    try {
+      await deleteRemoteCommunityLevel(id);
+      saveData.publishedRemoteIds = saveData.publishedRemoteIds.filter((remoteId) => remoteId !== id);
+      saveProgress();
+      communityLevelsLoaded = false;
+      await loadCommunityLevels(true);
+      setCommunityMessage("Published level removed.");
+    } catch (error) {
+      console.error(error);
+      window.alert("This level could not be removed.");
+    }
   }
 
   function importCustomLevelFromText() {

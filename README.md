@@ -23,21 +23,31 @@ A light source casts the shadow away from the player. Moving closer to the light
 - Custom level builder
 - Import and export custom levels as JSON
 - Static community levels loaded from JSON files
+- Global community publishing with Supabase
 - localStorage progress
 
 ## Community Levels
 
-Community Levels are static JSON levels listed in `community-levels/community-levels.json`. Each listed level points to a regular exported Shadow Box level JSON file in the same folder.
+Community Levels can come from two places: static JSON levels listed in `community-levels/community-levels.json`, and live levels published through Supabase.
 
 From the website:
 
 1. Create a level in Level Builder.
 2. Press `Publish`.
-3. Confirm the alert. The level appears immediately in Community Levels on that browser/device.
+3. Confirm the alert. Once Supabase is configured, the level appears in Community Levels for everyone.
 
 Saved levels also have a `Publish` button in Custom Levels.
 
-Maintainer/manual flow:
+To enable global publishing:
+
+1. Create a Supabase project.
+2. Run `supabase-community.sql` in the Supabase SQL editor.
+3. Put the project URL and public anon key in `community-config.js`.
+4. Deploy `community-config.js` with the site.
+
+Players can remove levels they published from the same browser. The browser stores a private owner key locally and uses it only for removal.
+
+Maintainer/manual static flow:
 
 1. Create a level in the existing Level Builder.
 2. Use the export field to copy the level JSON.
