@@ -12,6 +12,7 @@ A light source casts the shadow away from the player. Moving closer to the light
 
 - Move: `A` / `D` or Left / Right arrows
 - Jump: `Space`, `W`, or Up arrow
+- Phone: swipe or drag left/right to move, swipe up to jump
 - Restart level: `R`
 
 ## Features
@@ -31,9 +32,23 @@ Community Levels are static JSON levels listed in `community-levels/community-le
 To add a community level:
 
 1. Create a level in the existing Level Builder.
-2. Save or export the level JSON.
-3. Add the exported JSON file to `community-levels/`.
-4. Add an entry to `community-levels/community-levels.json` with `id`, `name`, `author`, `difficulty`, `description`, and `file`.
+2. Use the export field to copy the level JSON.
+3. Create a new `.json` file in `community-levels/`, for example `my-level.json`, and paste the exported JSON into it.
+4. Add an entry to `community-levels/community-levels.json`.
+5. Commit and push the changed JSON files. GitHub Pages will publish the level after the deployment finishes.
+
+Example manifest entry:
+
+```json
+{
+  "id": "my-level",
+  "name": "My Level",
+  "author": "Ivan",
+  "difficulty": "Medium",
+  "description": "A short note about the level.",
+  "file": "my-level.json"
+}
+```
 
 The game validates community levels before play. A level needs a player start, light source, door, at least one platform, and 1 to 3 stars.
 
