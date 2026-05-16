@@ -1055,6 +1055,12 @@ canvas {
   font-size: 0.68rem;
 }
 
+.card-actions .publish-button {
+  border-color: rgba(125, 216, 255, 0.42);
+  background: rgba(125, 216, 255, 0.12);
+  color: #dff6ff;
+}
+
 .empty-state {
   padding: 24px;
   color: var(--muted);

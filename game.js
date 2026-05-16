@@ -5,6 +5,8 @@
   const HEIGHT = 700;
   const SAVE_KEY = "shadowBoxSaveData";
   const COMMUNITY_MANIFEST_PATH = "community-levels/community-levels.json";
+  const COMMUNITY_SUBMISSION_URL = "https://github.com/IvanKudrenko/shadow-box/issues/new";
+  const COMMUNITY_SUBMISSION_URL_LIMIT = 7600;
   const DEBUG_SHADOW_HITBOX = false;
 
   const LIGHT_CORE_RADIUS = 70;
@@ -2033,6 +2035,8 @@
       const actions = card.querySelector(".card-actions");
       addCardButton(actions, "Play", () => startCustomLevel(level, SCREENS.CUSTOM_LEVELS));
       addCardButton(actions, "Edit", () => openBuilder(level));
+      const publishButton = addCardButton(actions, "Publish", () => publishCommunityLevel(level));
+      publishButton.classList.add("publish-button");
       addCardButton(actions, "Delete", () => deleteCustomLevel(level.id));
       addCardButton(actions, "Export", () => exportCustomLevel(level));
       ui.customLevelList.appendChild(card);
@@ -2254,6 +2258,7 @@
     decorateUiButton(button, label);
     button.addEventListener("click", onClick);
     parent.appendChild(button);
+    return button;
   }
 
   function decorateUiButton(button, label) {
@@ -2292,6 +2297,71 @@
     } catch (error) {
       setCustomMessage("Export JSON is ready to copy.");
     }
+  }
+
+  function publishCommunityLevel(level) {
+    const json = JSON.stringify(level, null, 2);
+    const fileName = `${slugifyCommunityLevel(level.name || level.id || "community-level")}.json`;
+    const fullBody = communitySubmissionBody(level, fileName, json);
+    const fullUrl = communitySubmissionUrl(level.name, fullBody);
+
+    ui.importExportText.value = json;
+
+    if (fullUrl.length <= COMMUNITY_SUBMISSION_URL_LIMIT) {
+      openCommunitySubmission(fullUrl);
+      setCustomMessage("Community submission opened on GitHub.");
+      return;
+    }
+
+    navigator.clipboard?.writeText(json).catch(() => {});
+    const shortBody = communitySubmissionBody(
+      level,
+      fileName,
+      "Paste the level JSON here. It was copied to your clipboard because the level is too large for a prefilled GitHub form."
+    );
+    openCommunitySubmission(communitySubmissionUrl(level.name, shortBody));
+    setCustomMessage("Community submission opened. Paste the copied JSON into the GitHub request.");
+  }
+
+  function communitySubmissionUrl(levelName, body) {
+    const params = new URLSearchParams({
+      title: `Community level: ${safeText(levelName, "Untitled Level", 60)}`,
+      body
+    });
+    return `${COMMUNITY_SUBMISSION_URL}?${params.toString()}`;
+  }
+
+  function communitySubmissionBody(level, fileName, jsonBlock) {
+    return [
+      "## Community level submission",
+      "",
+      `Name: ${safeText(level.name, "Untitled Level", 60)}`,
+      "Author: replace this with your name",
+      "Difficulty: Medium",
+      `Suggested file: \`community-levels/${fileName}\``,
+      "",
+      "## Level JSON",
+      "",
+      "```json",
+      jsonBlock,
+      "```"
+    ].join("\n");
+  }
+
+  function openCommunitySubmission(url) {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.href = url;
+    }
+  }
+
+  function slugifyCommunityLevel(value) {
+    const slug = String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48);
+    return slug || `community-${Date.now()}`;
   }
 
   function importCustomLevelFromText() {

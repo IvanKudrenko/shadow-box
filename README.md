@@ -29,7 +29,14 @@ A light source casts the shadow away from the player. Moving closer to the light
 
 Community Levels are static JSON levels listed in `community-levels/community-levels.json`. Each listed level points to a regular exported Shadow Box level JSON file in the same folder.
 
-To add a community level:
+From the website:
+
+1. Save your level in Level Builder.
+2. Open Custom Levels.
+3. Press `Publish` on your saved level.
+4. GitHub opens a prefilled community-level request. Add your author name and submit it.
+
+Maintainer/manual flow:
 
 1. Create a level in the existing Level Builder.
 2. Use the export field to copy the level JSON.
