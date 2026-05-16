@@ -4,6 +4,7 @@
   const WIDTH = 420;
   const HEIGHT = 700;
   const SAVE_KEY = "shadowBoxSaveData";
+  const COMMUNITY_MANIFEST_PATH = "community-levels/community-levels.json";
   const DEBUG_SHADOW_HITBOX = false;
 
   const LIGHT_CORE_RADIUS = 70;
@@ -65,7 +66,8 @@
     LEVEL_SELECT: "levelSelect",
     PLAYING: "playing",
     LEVEL_BUILDER: "levelBuilder",
-    CUSTOM_LEVELS: "customLevels"
+    CUSTOM_LEVELS: "customLevels",
+    COMMUNITY_LEVELS: "communityLevels"
   };
 
   const PLAY_STATES = {
@@ -77,6 +79,7 @@
 
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
+  const gameFrame = document.querySelector(".game-frame");
   const builderCanvas = document.getElementById("builderCanvas");
   const builderCtx = builderCanvas.getContext("2d");
 
@@ -95,7 +98,8 @@
     levelSelect: document.getElementById("levelSelect"),
     playing: document.getElementById("gameScreen"),
     levelBuilder: document.getElementById("levelBuilder"),
-    customLevels: document.getElementById("customLevels")
+    customLevels: document.getElementById("customLevels"),
+    communityLevels: document.getElementById("communityLevels")
   };
 
   const ui = {
@@ -103,21 +107,25 @@
     levelSelectButton: document.getElementById("levelSelectButton"),
     builderButton: document.getElementById("builderButton"),
     customLevelsButton: document.getElementById("customLevelsButton"),
+    communityLevelsButton: document.getElementById("communityLevelsButton"),
     resetProgressButton: document.getElementById("resetProgressButton"),
     gameBackButton: document.getElementById("gameBackButton"),
     restartButton: document.getElementById("restartButton"),
     levelGrid: document.getElementById("levelGrid"),
     customLevelList: document.getElementById("customLevelList"),
+    communityLevelList: document.getElementById("communityLevelList"),
     customLevelName: document.getElementById("customLevelName"),
     builderMessage: document.getElementById("builderMessage"),
     customMessage: document.getElementById("customMessage"),
+    communityMessage: document.getElementById("communityMessage"),
     platformSize: document.getElementById("platformSize"),
     testLevelButton: document.getElementById("testLevelButton"),
     saveLevelButton: document.getElementById("saveLevelButton"),
     clearBuilderButton: document.getElementById("clearBuilderButton"),
     importExportText: document.getElementById("importExportText"),
     importJsonButton: document.getElementById("importJsonButton"),
-    importFileInput: document.getElementById("importFileInput")
+    importFileInput: document.getElementById("importFileInput"),
+    refreshCommunityButton: document.getElementById("refreshCommunityButton")
   };
 
   const sprites = loadSprites(ASSET_SOURCES);
@@ -136,11 +144,22 @@
   let movingPlatforms = [];
   let keys = new Set();
   let jumpQueued = false;
+  let touchControl = {
+    active: false,
+    startX: 0,
+    startY: 0,
+    moveDirection: 0,
+    jumpReady: true
+  };
   let lastTime = 0;
   let animationTime = 0;
   let renderShadow = null;
   let messageTimer = 0;
   let transitionTimer = 0;
+  let communityLevels = [];
+  let communityLevelsLoaded = false;
+  let communityLevelsLoading = false;
+  let communityLevelsError = "";
 
   let builderLevel = createEmptyBuilderLevel();
   let builderTool = "select";
@@ -161,6 +180,7 @@
     ui.levelSelectButton.addEventListener("click", () => showScreen(SCREENS.LEVEL_SELECT));
     ui.builderButton.addEventListener("click", () => openBuilder());
     ui.customLevelsButton.addEventListener("click", () => showScreen(SCREENS.CUSTOM_LEVELS));
+    ui.communityLevelsButton.addEventListener("click", () => showScreen(SCREENS.COMMUNITY_LEVELS));
     ui.resetProgressButton.addEventListener("click", resetProgress);
     ui.restartButton.addEventListener("click", restartCurrentLevel);
     ui.gameBackButton.addEventListener("click", leaveGameplay);
@@ -178,6 +198,7 @@
     });
     ui.importJsonButton.addEventListener("click", importCustomLevelFromText);
     ui.importFileInput.addEventListener("change", importCustomLevelFromFile);
+    ui.refreshCommunityButton.addEventListener("click", () => loadCommunityLevels(true));
 
     document.querySelectorAll("[data-screen]").forEach((button) => {
       button.addEventListener("click", () => showScreen(button.dataset.screen));
@@ -198,8 +219,13 @@
       keys.delete(event.code);
       keys.delete(event.key);
     });
+    gameFrame.addEventListener("touchstart", onGameplayTouchStart, { passive: false });
+    gameFrame.addEventListener("touchmove", onGameplayTouchMove, { passive: false });
+    gameFrame.addEventListener("touchend", onGameplayTouchEnd, { passive: false });
+    gameFrame.addEventListener("touchcancel", onGameplayTouchEnd, { passive: false });
     window.addEventListener("blur", () => {
       keys.clear();
+      resetTouchControl();
       jumpQueued = false;
       builderDragging = false;
     });
@@ -704,6 +730,7 @@
     Object.entries(screens).forEach(([name, element]) => {
       element.hidden = name !== screenName;
     });
+    updateLevelTabs(screenName);
 
     hideOverlay();
 
@@ -713,9 +740,19 @@
     if (screenName === SCREENS.CUSTOM_LEVELS) {
       renderCustomLevels();
     }
+    if (screenName === SCREENS.COMMUNITY_LEVELS) {
+      renderCommunityLevels();
+      loadCommunityLevels();
+    }
     if (screenName === SCREENS.LEVEL_BUILDER) {
       drawBuilder();
     }
+  }
+
+  function updateLevelTabs(screenName) {
+    document.querySelectorAll(".level-tab").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.screen === screenName);
+    });
   }
 
   function renderLevelSelect() {
@@ -769,9 +806,17 @@
     startLevel(normalizeLevel(level));
   }
 
+  function startCommunityLevel(level) {
+    playSource = "community";
+    returnScreen = SCREENS.COMMUNITY_LEVELS;
+    currentLevelIndex = -1;
+    startLevel(level);
+  }
+
   function startLevel(levelData) {
     currentLevel = cloneLevel(levelData);
     resetLevelState();
+    ui.gameBackButton.textContent = returnScreenLabel();
     showScreen(SCREENS.PLAYING);
   }
 
@@ -808,6 +853,7 @@
     renderShadow = null;
     jumpQueued = false;
     keys.clear();
+    resetTouchControl();
     hideOverlay();
     setMessage(currentLevel.hint, 150);
     updateHud();
@@ -822,7 +868,11 @@
   }
 
   function updateHud() {
-    const levelLabel = playSource === "builtIn" ? `Level: ${currentLevel.id}/10` : "Custom Level";
+    const levelLabel = playSource === "builtIn"
+      ? `Level: ${currentLevel.id}/10`
+      : playSource === "community"
+        ? "Community Level"
+        : "Custom Level";
     hud.textContent = `${levelLabel}  Stars: ${countCollectedStars()}/${stars.length}`;
   }
 
@@ -866,6 +916,61 @@
 
     keys.add(event.code);
     keys.add(event.key);
+  }
+
+  function onGameplayTouchStart(event) {
+    if (!canUseTouchGameplay()) {
+      return;
+    }
+
+    event.preventDefault();
+    const touch = event.changedTouches[0];
+    touchControl = {
+      active: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      moveDirection: 0,
+      jumpReady: true
+    };
+  }
+
+  function onGameplayTouchMove(event) {
+    if (!canUseTouchGameplay() || !touchControl.active) {
+      return;
+    }
+
+    event.preventDefault();
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchControl.startX;
+    const deltaY = touch.clientY - touchControl.startY;
+    const horizontalThreshold = 18;
+    const jumpThreshold = 34;
+
+    touchControl.moveDirection = Math.abs(deltaX) >= horizontalThreshold ? Math.sign(deltaX) : 0;
+
+    if (touchControl.jumpReady && -deltaY >= jumpThreshold && Math.abs(deltaY) > Math.abs(deltaX) * 0.65) {
+      jumpQueued = true;
+      touchControl.jumpReady = false;
+    }
+  }
+
+  function onGameplayTouchEnd(event) {
+    if (!touchControl.active) {
+      return;
+    }
+
+    event.preventDefault();
+    resetTouchControl();
+  }
+
+  function canUseTouchGameplay() {
+    return activeScreen === SCREENS.PLAYING && playState === PLAY_STATES.PLAYING;
+  }
+
+  function resetTouchControl() {
+    touchControl.active = false;
+    touchControl.moveDirection = 0;
+    touchControl.jumpReady = true;
   }
 
   function keyMatches(event, names) {
@@ -989,9 +1094,10 @@
   }
 
   function updatePlayer(delta) {
-    const moveDirection =
+    const keyboardMoveDirection =
       (isPressed("ArrowRight", "KeyD", "d") ? 1 : 0) -
       (isPressed("ArrowLeft", "KeyA", "a") ? 1 : 0);
+    const moveDirection = clamp(keyboardMoveDirection + touchControl.moveDirection, -1, 1);
     const previousY = player.y;
     const wasOnGround = player.onGround;
 
@@ -1185,7 +1291,7 @@
       actions: [
         { label: playSource === "builtIn" ? "Next Level" : "Play Again", onClick: playSource === "builtIn" ? goToNextLevel : restartCurrentLevel },
         { label: "Retry", onClick: restartCurrentLevel },
-        { label: playSource === "builtIn" ? "Level Select" : "Custom Levels", onClick: () => showScreen(returnScreen) }
+        { label: returnScreenLabel(), onClick: () => showScreen(returnScreen) }
       ]
     });
   }
@@ -1202,6 +1308,7 @@
     player.vy = 0;
     jumpQueued = false;
     keys.clear();
+    resetTouchControl();
     setMessage(reason);
     showGameplayOverlay({
       kicker: currentLevel.name,
@@ -1210,9 +1317,16 @@
       prompt: "Press R to try again",
       actions: [
         { label: "Try Again", onClick: restartCurrentLevel },
-        { label: playSource === "builtIn" ? "Level Select" : "Custom Levels", onClick: () => showScreen(returnScreen) }
+        { label: returnScreenLabel(), onClick: () => showScreen(returnScreen) }
       ]
     });
+  }
+
+  function returnScreenLabel() {
+    if (returnScreen === SCREENS.COMMUNITY_LEVELS) {
+      return "Community Levels";
+    }
+    return playSource === "builtIn" ? "Level Select" : "Custom Levels";
   }
 
   function showGameplayOverlay({ kicker, title, reason, prompt, actions }) {
@@ -1911,6 +2025,214 @@
     });
   }
 
+  function renderCommunityLevels() {
+    ui.communityLevelList.innerHTML = "";
+
+    if (communityLevelsLoading) {
+      const loading = document.createElement("div");
+      loading.className = "empty-state";
+      loading.textContent = "Loading community levels...";
+      ui.communityLevelList.appendChild(loading);
+      setCommunityMessage("");
+      return;
+    }
+
+    if (communityLevelsError) {
+      const error = document.createElement("div");
+      error.className = "empty-state";
+      error.textContent = communityLevelsError;
+      ui.communityLevelList.appendChild(error);
+      setCommunityMessage(communityLevelsError);
+      return;
+    }
+
+    if (!communityLevelsLoaded) {
+      const waiting = document.createElement("div");
+      waiting.className = "empty-state";
+      waiting.textContent = "Community levels will appear here.";
+      ui.communityLevelList.appendChild(waiting);
+      return;
+    }
+
+    if (communityLevels.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "No community levels are listed yet.";
+      ui.communityLevelList.appendChild(empty);
+      setCommunityMessage("");
+      return;
+    }
+
+    communityLevels.forEach((entry) => {
+      const card = document.createElement("article");
+      card.className = "custom-card community-card";
+      card.innerHTML = `
+        <div class="community-card-header">
+          <h3>${escapeHtml(entry.name)}</h3>
+          <span class="difficulty-badge">${escapeHtml(entry.difficulty)}</span>
+        </div>
+        <p class="community-author">By ${escapeHtml(entry.author)}</p>
+        <p>${escapeHtml(entry.description)}</p>
+        <div class="card-actions"></div>
+      `;
+      const actions = card.querySelector(".card-actions");
+      addCardButton(actions, "Play", () => loadAndPlayCommunityLevel(entry));
+      ui.communityLevelList.appendChild(card);
+    });
+
+    setCommunityMessage("");
+  }
+
+  async function loadCommunityLevels(force = false) {
+    if (communityLevelsLoading || (communityLevelsLoaded && !force)) {
+      return;
+    }
+
+    communityLevelsLoading = true;
+    communityLevelsError = "";
+    renderCommunityLevels();
+
+    try {
+      const response = await fetch(COMMUNITY_MANIFEST_PATH, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Manifest request failed: ${response.status}`);
+      }
+
+      const manifest = await response.json();
+      const entries = Array.isArray(manifest) ? manifest : manifest?.levels;
+      if (!Array.isArray(entries)) {
+        throw new Error("Manifest is missing a levels list.");
+      }
+
+      communityLevels = entries
+        .map(normalizeCommunityEntry)
+        .filter(Boolean);
+      communityLevelsLoaded = true;
+    } catch (error) {
+      console.error(error);
+      communityLevels = [];
+      communityLevelsLoaded = false;
+      communityLevelsError = "Community levels could not be loaded.";
+    } finally {
+      communityLevelsLoading = false;
+      renderCommunityLevels();
+    }
+  }
+
+  function normalizeCommunityEntry(entry, index) {
+    const safe = entry && typeof entry === "object" ? entry : {};
+    const file = String(safe.file || "").trim();
+
+    return {
+      id: safeText(safe.id, `community-${index + 1}`, 64),
+      name: safeText(safe.name, "Community Level", 40),
+      author: safeText(safe.author, "Unknown Author", 40),
+      difficulty: safeText(safe.difficulty, "Unknown Difficulty", 24),
+      description: safeText(safe.description, "A shared Shadow Box level.", 140),
+      file
+    };
+  }
+
+  async function loadAndPlayCommunityLevel(entry) {
+    setCommunityMessage("");
+
+    const levelUrl = communityLevelUrl(entry.file);
+    if (!levelUrl) {
+      setCommunityMessage("This community level could not be loaded.");
+      return;
+    }
+
+    try {
+      const response = await fetch(levelUrl, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Level request failed: ${response.status}`);
+      }
+
+      const parsed = await response.json();
+      const level = normalizeCommunityLevel(parsed, entry);
+      if (!level) {
+        throw new Error("Level JSON is not structurally valid.");
+      }
+
+      startCommunityLevel(level);
+    } catch (error) {
+      console.error(error);
+      setCommunityMessage("This community level could not be loaded.");
+    }
+  }
+
+  function communityLevelUrl(file) {
+    const safeFile = String(file || "").trim();
+    if (!safeFile || safeFile.startsWith("/") || safeFile.includes("..") || /^[a-z][a-z0-9+.-]*:/i.test(safeFile)) {
+      return "";
+    }
+
+    return new URL(safeFile, new URL(COMMUNITY_MANIFEST_PATH, window.location.href)).href;
+  }
+
+  function normalizeCommunityLevel(level, entry) {
+    if (!hasRequiredLevelFields(level)) {
+      return null;
+    }
+
+    const normalized = normalizeLevel({
+      ...level,
+      id: level.id || entry.id,
+      name: level.name || entry.name || "Community Level",
+      hint: level.hint || level.description || entry.description || "Community level."
+    });
+
+    if (!normalized || !isLevelStructurallyValid(normalized)) {
+      return null;
+    }
+
+    normalized.id = safeText(level.id || entry.id, "community-level", 64);
+    normalized.name = safeText(level.name || entry.name, "Community Level", 40);
+    normalized.hint = safeText(level.hint || entry.description, "Community level.", 120);
+    return normalized;
+  }
+
+  function hasRequiredLevelFields(level) {
+    const platforms = Array.isArray(level?.platforms) ? level.platforms : [];
+    const movingPlatforms = Array.isArray(level?.movingPlatforms) ? level.movingPlatforms : [];
+    const stars = Array.isArray(level?.stars) ? level.stars : [];
+
+    return Boolean(
+      level &&
+      typeof level === "object" &&
+      isPointLike(level.playerStart) &&
+      isPointLike(level.light) &&
+      isPointLike(level.door) &&
+      [...platforms, ...movingPlatforms].some(isPlatformLike) &&
+      stars.length >= 1 &&
+      stars.length <= 3 &&
+      stars.every(isPointLike)
+    );
+  }
+
+  function isPointLike(value) {
+    return Boolean(
+      value &&
+      Number.isFinite(Number(value.x)) &&
+      Number.isFinite(Number(value.y))
+    );
+  }
+
+  function isPlatformLike(value) {
+    return Boolean(
+      isPointLike(value) &&
+      Number.isFinite(Number(value.width ?? value.w)) &&
+      Number(value.width ?? value.w) > 0 &&
+      Number.isFinite(Number(value.height ?? value.h)) &&
+      Number(value.height ?? value.h) > 0
+    );
+  }
+
+  function safeText(value, fallback, maxLength) {
+    const text = String(value || "").trim();
+    return (text || fallback).slice(0, maxLength);
+  }
+
   function addCardButton(parent, label, onClick) {
     const button = document.createElement("button");
     button.type = "button";
@@ -2001,6 +2323,10 @@
 
   function setCustomMessage(text) {
     ui.customMessage.textContent = text;
+  }
+
+  function setCommunityMessage(text) {
+    ui.communityMessage.textContent = text;
   }
 
   function escapeHtml(value) {

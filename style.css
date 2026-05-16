@@ -399,6 +399,7 @@ textarea {
 }
 
 #customLevelsButton,
+#communityLevelsButton,
 #builderButton {
   grid-column: 1 / -1;
 }
@@ -523,6 +524,28 @@ textarea {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
+}
+
+.level-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.level-tab {
+  min-height: 38px;
+  border-color: rgba(125, 216, 255, 0.22);
+  background: rgba(125, 216, 255, 0.06);
+  color: #dff6ff;
+  font-size: 0.68rem;
+}
+
+.level-tab.is-active {
+  border-color: rgba(125, 216, 255, 0.76);
+  background: rgba(125, 216, 255, 0.16);
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(125, 216, 255, 0.1);
 }
 
 .level-card,
@@ -659,6 +682,7 @@ textarea {
   box-shadow:
     0 22px 54px rgba(0, 0, 0, 0.56),
     0 0 34px rgba(125, 216, 255, 0.08);
+  touch-action: none;
 }
 
 canvas {
@@ -666,6 +690,7 @@ canvas {
   width: 100%;
   height: 100%;
   background: #000;
+  touch-action: none;
 }
 
 .hud {
@@ -978,6 +1003,46 @@ canvas {
   font-size: 0.84rem;
 }
 
+.community-card {
+  border-color: rgba(125, 216, 255, 0.24);
+  text-align: left;
+}
+
+.community-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.community-card-header h3 {
+  margin-bottom: 4px;
+}
+
+.community-author {
+  color: #dff6ff;
+}
+
+.difficulty-badge {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid rgba(255, 213, 111, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 213, 111, 0.08);
+  color: #ffe486;
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.community-info-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .card-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1000,6 +1065,11 @@ canvas {
   .level-grid,
   .custom-list,
   .builder-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .level-tabs {
+    display: grid;
     grid-template-columns: 1fr;
   }
 }

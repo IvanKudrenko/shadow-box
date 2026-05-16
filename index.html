@@ -22,6 +22,7 @@
         <button id="playButton" class="primary-button icon-play" type="button">Play</button>
         <button id="levelSelectButton" type="button">Levels</button>
         <button id="customLevelsButton" type="button">Custom Levels</button>
+        <button id="communityLevelsButton" type="button">Community Levels</button>
         <button id="builderButton" type="button">Level Builder</button>
       </div>
       <button id="resetProgressButton" class="settings-button" type="button">
@@ -38,6 +39,11 @@
           <h2>Select Level</h2>
         </div>
       </div>
+      <nav class="level-tabs" aria-label="Level categories">
+        <button class="level-tab" data-screen="levelSelect" type="button">Built-in Levels</button>
+        <button class="level-tab" data-screen="customLevels" type="button">My Levels</button>
+        <button class="level-tab" data-screen="communityLevels" type="button">Community Levels</button>
+      </nav>
       <div id="levelGrid" class="level-grid" aria-live="polite"></div>
     </section>
 
@@ -122,6 +128,11 @@
           <h2>Custom Levels</h2>
         </div>
       </div>
+      <nav class="level-tabs" aria-label="Level categories">
+        <button class="level-tab" data-screen="levelSelect" type="button">Built-in Levels</button>
+        <button class="level-tab" data-screen="customLevels" type="button">My Levels</button>
+        <button class="level-tab" data-screen="communityLevels" type="button">Community Levels</button>
+      </nav>
       <div id="customLevelList" class="custom-list"></div>
       <div class="import-panel">
         <h3>Import / Export JSON</h3>
@@ -131,6 +142,30 @@
           <input id="importFileInput" type="file" accept="application/json,.json">
         </div>
         <p id="customMessage" class="panel-message" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="communityLevels" class="screen" hidden>
+      <div class="screen-header">
+        <button class="back-button" data-screen="mainMenu" type="button">Back</button>
+        <div>
+          <p class="eyebrow">Shared creations</p>
+          <h2>Community Levels</h2>
+        </div>
+      </div>
+      <nav class="level-tabs" aria-label="Level categories">
+        <button class="level-tab" data-screen="levelSelect" type="button">Built-in Levels</button>
+        <button class="level-tab" data-screen="customLevels" type="button">My Levels</button>
+        <button class="level-tab" data-screen="communityLevels" type="button">Community Levels</button>
+      </nav>
+      <div id="communityLevelList" class="custom-list community-list" aria-live="polite"></div>
+      <div class="import-panel community-info-panel">
+        <h3>Static Community Pack</h3>
+        <p>Levels here are loaded from the local community manifest and use the same JSON format exported by Level Builder.</p>
+        <div class="inline-actions">
+          <button id="refreshCommunityButton" type="button">Refresh List</button>
+        </div>
+        <p id="communityMessage" class="panel-message" aria-live="polite"></p>
       </div>
     </section>
   </main>
