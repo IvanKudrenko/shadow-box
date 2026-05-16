@@ -5,8 +5,6 @@
   const HEIGHT = 700;
   const SAVE_KEY = "shadowBoxSaveData";
   const COMMUNITY_MANIFEST_PATH = "community-levels/community-levels.json";
-  const COMMUNITY_SUBMISSION_URL = "https://github.com/IvanKudrenko/shadow-box/issues/new";
-  const COMMUNITY_SUBMISSION_URL_LIMIT = 7600;
   const DEBUG_SHADOW_HITBOX = false;
 
   const LIGHT_CORE_RADIUS = 70;
@@ -123,6 +121,7 @@
     platformSize: document.getElementById("platformSize"),
     testLevelButton: document.getElementById("testLevelButton"),
     saveLevelButton: document.getElementById("saveLevelButton"),
+    publishLevelButton: document.getElementById("publishLevelButton"),
     clearBuilderButton: document.getElementById("clearBuilderButton"),
     importExportText: document.getElementById("importExportText"),
     importJsonButton: document.getElementById("importJsonButton"),
@@ -188,6 +187,7 @@
     ui.gameBackButton.addEventListener("click", leaveGameplay);
     ui.testLevelButton.addEventListener("click", testBuilderLevel);
     ui.saveLevelButton.addEventListener("click", saveBuilderLevel);
+    ui.publishLevelButton.addEventListener("click", publishBuilderLevel);
     ui.clearBuilderButton.addEventListener("click", () => {
       if (window.confirm("Clear the current builder level?")) {
         builderLevel = createEmptyBuilderLevel();
@@ -255,7 +255,8 @@
       unlockedLevels: 1,
       bestStarsByLevel: {},
       completedLevels: {},
-      customLevels: []
+      customLevels: [],
+      publishedLevels: []
     };
   }
 
@@ -274,7 +275,8 @@
       unlockedLevels: clamp(Number(safe.unlockedLevels) || 1, 1, BUILT_IN_LEVELS.length),
       bestStarsByLevel: safe.bestStarsByLevel && typeof safe.bestStarsByLevel === "object" ? safe.bestStarsByLevel : {},
       completedLevels: safe.completedLevels && typeof safe.completedLevels === "object" ? safe.completedLevels : {},
-      customLevels: Array.isArray(safe.customLevels) ? safe.customLevels.map(normalizeCustomLevel).filter(Boolean) : []
+      customLevels: Array.isArray(safe.customLevels) ? safe.customLevels.map(normalizeCustomLevel).filter(Boolean) : [],
+      publishedLevels: Array.isArray(safe.publishedLevels) ? safe.publishedLevels.map(normalizeCustomLevel).filter(Boolean) : []
     };
   }
 
@@ -289,7 +291,8 @@
 
     saveData = {
       ...defaultSaveData(),
-      customLevels: saveData.customLevels
+      customLevels: saveData.customLevels,
+      publishedLevels: saveData.publishedLevels
     };
     saveProgress();
     renderLevelSelect();
@@ -1904,12 +1907,12 @@
     startCustomLevel(level, SCREENS.LEVEL_BUILDER);
   }
 
-  function saveBuilderLevel() {
+  function saveBuilderLevel(options = {}) {
     const level = buildLevelFromBuilder();
     const error = validateBuilderLevel(level);
     if (error) {
       setBuilderMessage(error);
-      return;
+      return null;
     }
 
     const existingIndex = saveData.customLevels.findIndex((custom) => custom.id === level.id);
@@ -1923,7 +1926,21 @@
     }
 
     saveProgress();
-    setBuilderMessage("Level saved.");
+    if (!options.silent) {
+      setBuilderMessage("Level saved.");
+    }
+    renderCustomLevels();
+    return level;
+  }
+
+  function publishBuilderLevel() {
+    const level = saveBuilderLevel({ silent: true });
+    if (!level) {
+      return;
+    }
+
+    publishLevelImmediately(level);
+    setBuilderMessage("Published to Community Levels.");
   }
 
   function setBuilderMessage(text) {
@@ -2045,8 +2062,9 @@
 
   function renderCommunityLevels() {
     ui.communityLevelList.innerHTML = "";
+    const localEntries = publishedCommunityEntries();
 
-    if (communityLevelsLoading) {
+    if (communityLevelsLoading && localEntries.length === 0) {
       const loading = document.createElement("div");
       loading.className = "empty-state";
       loading.textContent = "Loading community levels...";
@@ -2055,7 +2073,7 @@
       return;
     }
 
-    if (communityLevelsError) {
+    if (communityLevelsError && localEntries.length === 0) {
       const error = document.createElement("div");
       error.className = "empty-state";
       error.textContent = communityLevelsError;
@@ -2064,7 +2082,7 @@
       return;
     }
 
-    if (!communityLevelsLoaded) {
+    if (!communityLevelsLoaded && localEntries.length === 0) {
       const waiting = document.createElement("div");
       waiting.className = "empty-state";
       waiting.textContent = "Community levels will appear here.";
@@ -2072,7 +2090,12 @@
       return;
     }
 
-    if (communityLevels.length === 0) {
+    const entries = [
+      ...localEntries,
+      ...communityLevels.map((entry) => ({ ...entry, source: "pack" }))
+    ];
+
+    if (entries.length === 0) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
       empty.textContent = "No community levels are listed yet.";
@@ -2081,7 +2104,7 @@
       return;
     }
 
-    communityLevels.forEach((entry) => {
+    entries.forEach((entry) => {
       const card = document.createElement("article");
       card.className = "custom-card community-card";
       card.innerHTML = `
@@ -2094,11 +2117,27 @@
         <div class="card-actions"></div>
       `;
       const actions = card.querySelector(".card-actions");
-      addCardButton(actions, "Play", () => loadAndPlayCommunityLevel(entry));
+      if (entry.level) {
+        addCardButton(actions, "Play", () => startCommunityLevel(entry.level));
+      } else {
+        addCardButton(actions, "Play", () => loadAndPlayCommunityLevel(entry));
+      }
       ui.communityLevelList.appendChild(card);
     });
 
     setCommunityMessage("");
+  }
+
+  function publishedCommunityEntries() {
+    return saveData.publishedLevels.map((level) => ({
+      id: level.id,
+      name: level.name,
+      author: "You",
+      difficulty: "Published",
+      description: "Published from this browser.",
+      level,
+      source: "local"
+    }));
   }
 
   async function loadCommunityLevels(force = false) {
@@ -2300,68 +2339,33 @@
   }
 
   function publishCommunityLevel(level) {
-    const json = JSON.stringify(level, null, 2);
-    const fileName = `${slugifyCommunityLevel(level.name || level.id || "community-level")}.json`;
-    const fullBody = communitySubmissionBody(level, fileName, json);
-    const fullUrl = communitySubmissionUrl(level.name, fullBody);
-
-    ui.importExportText.value = json;
-
-    if (fullUrl.length <= COMMUNITY_SUBMISSION_URL_LIMIT) {
-      openCommunitySubmission(fullUrl);
-      setCustomMessage("Community submission opened on GitHub.");
-      return;
+    if (publishLevelImmediately(level)) {
+      setCustomMessage("Published to Community Levels.");
     }
-
-    navigator.clipboard?.writeText(json).catch(() => {});
-    const shortBody = communitySubmissionBody(
-      level,
-      fileName,
-      "Paste the level JSON here. It was copied to your clipboard because the level is too large for a prefilled GitHub form."
-    );
-    openCommunitySubmission(communitySubmissionUrl(level.name, shortBody));
-    setCustomMessage("Community submission opened. Paste the copied JSON into the GitHub request.");
   }
 
-  function communitySubmissionUrl(levelName, body) {
-    const params = new URLSearchParams({
-      title: `Community level: ${safeText(levelName, "Untitled Level", 60)}`,
-      body
+  function publishLevelImmediately(level) {
+    const published = normalizeCustomLevel({
+      ...level,
+      id: `published-${level.id || Date.now()}`
     });
-    return `${COMMUNITY_SUBMISSION_URL}?${params.toString()}`;
-  }
 
-  function communitySubmissionBody(level, fileName, jsonBlock) {
-    return [
-      "## Community level submission",
-      "",
-      `Name: ${safeText(level.name, "Untitled Level", 60)}`,
-      "Author: replace this with your name",
-      "Difficulty: Medium",
-      `Suggested file: \`community-levels/${fileName}\``,
-      "",
-      "## Level JSON",
-      "",
-      "```json",
-      jsonBlock,
-      "```"
-    ].join("\n");
-  }
-
-  function openCommunitySubmission(url) {
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      window.location.href = url;
+    if (!published) {
+      window.alert("This level is not ready to publish.");
+      return false;
     }
-  }
 
-  function slugifyCommunityLevel(value) {
-    const slug = String(value || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 48);
-    return slug || `community-${Date.now()}`;
+    const existingIndex = saveData.publishedLevels.findIndex((savedLevel) => savedLevel.id === published.id);
+    if (existingIndex >= 0) {
+      saveData.publishedLevels[existingIndex] = published;
+    } else {
+      saveData.publishedLevels.unshift(published);
+    }
+
+    saveProgress();
+    renderCommunityLevels();
+    window.alert("Level published to Community Levels.");
+    return true;
   }
 
   function importCustomLevelFromText() {

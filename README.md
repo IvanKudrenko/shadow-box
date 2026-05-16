@@ -31,10 +31,11 @@ Community Levels are static JSON levels listed in `community-levels/community-le
 
 From the website:
 
-1. Save your level in Level Builder.
-2. Open Custom Levels.
-3. Press `Publish` on your saved level.
-4. GitHub opens a prefilled community-level request. Add your author name and submit it.
+1. Create a level in Level Builder.
+2. Press `Publish`.
+3. Confirm the alert. The level appears immediately in Community Levels on that browser/device.
+
+Saved levels also have a `Publish` button in Custom Levels.
 
 Maintainer/manual flow:
 
