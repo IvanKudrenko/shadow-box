@@ -891,6 +891,10 @@
   }
 
   function onKeyDown(event) {
+    if (isTextEntryTarget(event.target)) {
+      return;
+    }
+
     if (keyMatches(event, ["ArrowLeft", "ArrowRight", "ArrowUp", "Space", "KeyA", "KeyD", "KeyW", "a", "d", "w"])) {
       event.preventDefault();
     }
@@ -916,6 +920,14 @@
 
     keys.add(event.code);
     keys.add(event.key);
+  }
+
+  function isTextEntryTarget(target) {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+
+    return target.matches("input, textarea, select") || target.isContentEditable;
   }
 
   function onGameplayTouchStart(event) {
@@ -1050,10 +1062,12 @@
     }
 
     if (player.onGround) {
-      const correction = normalizeAngle(-player.rotation);
+      const sideAngle = Math.PI / 2;
+      const landingTarget = Math.round(player.rotation / sideAngle) * sideAngle;
+      const correction = normalizeAngle(landingTarget - player.rotation);
       player.rotation += correction * Math.min(1, PLAYER_ROTATION_EASE * delta);
       if (Math.abs(correction) < 0.01) {
-        player.rotation = 0;
+        player.rotation = normalizeAngle(landingTarget);
       }
     } else {
       const flipDirection = player.facing || 1;
