@@ -2119,6 +2119,7 @@
       const actions = card.querySelector(".card-actions");
       if (entry.level) {
         addCardButton(actions, "Play", () => startCommunityLevel(entry.level));
+        addCardButton(actions, "Remove", () => removePublishedLevel(entry.id));
       } else {
         addCardButton(actions, "Play", () => loadAndPlayCommunityLevel(entry));
       }
@@ -2345,6 +2346,10 @@
   }
 
   function publishLevelImmediately(level) {
+    if (!window.confirm("Publish this level to Community Levels on this device?")) {
+      return false;
+    }
+
     const published = normalizeCustomLevel({
       ...level,
       id: `published-${level.id || Date.now()}`
@@ -2366,6 +2371,17 @@
     renderCommunityLevels();
     window.alert("Level published to Community Levels.");
     return true;
+  }
+
+  function removePublishedLevel(id) {
+    if (!window.confirm("Remove this published level from Community Levels on this device?")) {
+      return;
+    }
+
+    saveData.publishedLevels = saveData.publishedLevels.filter((level) => level.id !== id);
+    saveProgress();
+    renderCommunityLevels();
+    setCommunityMessage("Published level removed.");
   }
 
   function importCustomLevelFromText() {
