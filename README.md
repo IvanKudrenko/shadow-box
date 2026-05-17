@@ -23,26 +23,28 @@ A light source casts the shadow away from the player. Moving closer to the light
 - Custom level builder
 - Import and export custom levels as JSON
 - Static community levels loaded from JSON files
-- Global community publishing with Supabase
+- Global community publishing with MantleDB by default, with optional Supabase support
 - localStorage progress
 
 ## Community Levels
 
-Community Levels can come from two places: static JSON levels listed in `community-levels/community-levels.json`, and live levels published through Supabase.
+Community Levels can come from two places: static JSON levels listed in `community-levels/community-levels.json`, and live levels published through the shared community backend.
 
 From the website:
 
 1. Create a level in Level Builder.
 2. Press `Publish`.
-3. Confirm the alert. Once Supabase is configured, the level appears in Community Levels for everyone.
+3. Confirm the alert. The level appears in Community Levels for everyone.
 
 Saved levels also have a `Publish` button in Custom Levels.
 
-To enable global publishing:
+Global publishing works out of the box with the MantleDB namespace in `community-config.js`.
+
+Optional Supabase setup:
 
 1. Create a Supabase project.
 2. Run `supabase-community.sql` in the Supabase SQL editor.
-3. Put the project URL and public anon key in `community-config.js`.
+3. Put the project URL and public anon key in `community-config.js` and change `provider` away from `mantle`.
 4. Deploy `community-config.js` with the site.
 
 Players can remove levels they published from the same browser. The browser stores a private owner key locally and uses it only for removal.

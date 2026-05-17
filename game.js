@@ -7,6 +7,7 @@
   const COMMUNITY_OWNER_KEY = `${SAVE_KEY}:communityOwnerKey`;
   const COMMUNITY_MANIFEST_PATH = "community-levels/community-levels.json";
   const COMMUNITY_TABLE = "community_levels";
+  const MANTLE_BASE_URL = "https://mantledb.sh";
   const DEBUG_SHADOW_HITBOX = false;
 
   const LIGHT_CORE_RADIUS = 70;
@@ -2210,21 +2211,23 @@
   }
 
   async function loadRemoteCommunityEntries() {
-    if (!hasSupabaseCommunityConfig()) {
-      return [];
+    const entries = [];
+
+    if (hasSupabaseCommunityConfig()) {
+      const rows = await supabaseRequest(
+        `${COMMUNITY_TABLE}?select=id,level_id,name,author,difficulty,description,level,created_at&order=created_at.desc&limit=100`
+      );
+
+      if (Array.isArray(rows)) {
+        entries.push(...rows.map(normalizeSupabaseCommunityEntry).filter(Boolean));
+      }
     }
 
-    const rows = await supabaseRequest(
-      `${COMMUNITY_TABLE}?select=id,level_id,name,author,difficulty,description,level,created_at&order=created_at.desc&limit=100`
-    );
-
-    if (!Array.isArray(rows)) {
-      return [];
+    if (hasMantleCommunityConfig()) {
+      entries.push(...await loadMantleCommunityEntries());
     }
 
-    return rows
-      .map(normalizeRemoteCommunityEntry)
-      .filter(Boolean);
+    return entries;
   }
 
   function normalizeCommunityEntry(entry, index) {
@@ -2241,7 +2244,7 @@
     };
   }
 
-  function normalizeRemoteCommunityEntry(row) {
+  function normalizeSupabaseCommunityEntry(row) {
     const level = normalizeCommunityLevel(row?.level, row || {});
     if (!level || !row?.id) {
       return null;
@@ -2256,6 +2259,25 @@
       level,
       source: "remote",
       canRemove: saveData.publishedRemoteIds.includes(String(row.id))
+    };
+  }
+
+  function normalizeMantleCommunityEntry(row, path) {
+    const id = mantleRemoteId(path);
+    const level = normalizeCommunityLevel(row?.level, row || {});
+    if (!level || !id) {
+      return null;
+    }
+
+    return {
+      id,
+      name: safeText(row.name || level.name, "Community Level", 40),
+      author: safeText(row.author, "Community Player", 40),
+      difficulty: safeText(row.difficulty, "Community", 24),
+      description: safeText(row.description || level.hint, "A shared Shadow Box level.", 140),
+      level,
+      source: "remote",
+      canRemove: row.owner_key === getCommunityOwnerKey() || saveData.publishedRemoteIds.includes(id)
     };
   }
 
@@ -2362,6 +2384,8 @@
   function communityConfig() {
     const config = window.SHADOW_BOX_COMMUNITY || {};
     return {
+      provider: String(config.provider || "").trim(),
+      mantleNamespace: String(config.mantleNamespace || "").trim(),
       supabaseUrl: String(config.supabaseUrl || "").replace(/\/+$/, ""),
       supabaseAnonKey: String(config.supabaseAnonKey || "").trim()
     };
@@ -2370,6 +2394,64 @@
   function hasSupabaseCommunityConfig() {
     const config = communityConfig();
     return Boolean(config.supabaseUrl && config.supabaseAnonKey);
+  }
+
+  function hasMantleCommunityConfig() {
+    const config = communityConfig();
+    return config.provider === "mantle" && /^[a-z0-9-]{6,80}$/i.test(config.mantleNamespace);
+  }
+
+  function mantleUrl(path) {
+    const namespace = encodeURIComponent(communityConfig().mantleNamespace);
+    return `${MANTLE_BASE_URL}/v2/${namespace}/${path}`;
+  }
+
+  async function mantleRequest(path, options = {}) {
+    const response = await fetch(mantleUrl(path), {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Mantle request failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async function loadMantleCommunityEntries() {
+    const namespace = encodeURIComponent(communityConfig().mantleNamespace);
+    const listResponse = await fetch(`${MANTLE_BASE_URL}/v2/list/${namespace}`);
+    if (!listResponse.ok) {
+      throw new Error(`Mantle list request failed: ${listResponse.status}`);
+    }
+
+    const list = await listResponse.json();
+    const paths = Array.isArray(list.entries)
+      ? list.entries
+        .filter((entry) => String(entry.path || "").startsWith("levels/"))
+        .sort((a, b) => Number(b.updated_at || 0) - Number(a.updated_at || 0))
+        .slice(0, 100)
+      : [];
+
+    const rows = await Promise.all(paths.map(async (entry) => {
+      try {
+        return {
+          path: String(entry.path),
+          data: await mantleRequest(String(entry.path))
+        };
+      } catch (error) {
+        console.error(error);
+        return null;
+      }
+    }));
+
+    return rows
+      .map((row) => row && normalizeMantleCommunityEntry(row.data, row.path))
+      .filter(Boolean);
   }
 
   async function supabaseRequest(path, options = {}) {
@@ -2400,6 +2482,10 @@
   }
 
   async function createRemoteCommunityLevel(level) {
+    if (hasMantleCommunityConfig()) {
+      return createMantleCommunityLevel(level);
+    }
+
     const rows = await supabaseRequest(COMMUNITY_TABLE, {
       method: "POST",
       headers: {
@@ -2420,6 +2506,10 @@
   }
 
   async function deleteRemoteCommunityLevel(id) {
+    if (String(id).startsWith("mantle:")) {
+      return deleteMantleCommunityLevel(id);
+    }
+
     return supabaseRequest("rpc/delete_community_level", {
       method: "POST",
       body: JSON.stringify({
@@ -2427,6 +2517,68 @@
         p_owner_key: getCommunityOwnerKey()
       })
     });
+  }
+
+  async function createMantleCommunityLevel(level) {
+    const entryId = slugId(level.id || `level-${Date.now()}`);
+    const path = `levels/${entryId}`;
+    const entry = {
+      id: entryId,
+      level_id: safeText(level.id, entryId, 64),
+      name: safeText(level.name, "Community Level", 40),
+      author: "Player",
+      difficulty: "Community",
+      description: safeText(level.hint, "Published from Level Builder.", 140),
+      level,
+      owner_key: getCommunityOwnerKey(),
+      created_at: new Date().toISOString()
+    };
+
+    await mantleRequest(path, {
+      method: "POST",
+      body: JSON.stringify(entry)
+    });
+
+    return {
+      id: mantleRemoteId(path)
+    };
+  }
+
+  async function deleteMantleCommunityLevel(id) {
+    const path = mantlePathFromRemoteId(id);
+    if (!path) {
+      throw new Error("Unknown community level id.");
+    }
+
+    const row = await mantleRequest(path);
+    if (row.owner_key !== getCommunityOwnerKey()) {
+      throw new Error("This browser does not own that community level.");
+    }
+
+    return mantleRequest(path, { method: "DELETE" });
+  }
+
+  function mantleRemoteId(path) {
+    return path ? `mantle:${path}` : "";
+  }
+
+  function mantlePathFromRemoteId(id) {
+    const text = String(id || "");
+    if (!text.startsWith("mantle:levels/")) {
+      return "";
+    }
+
+    return text.slice("mantle:".length);
+  }
+
+  function slugId(value) {
+    const clean = String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 44);
+    const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    return `${clean || "level"}-${suffix}`;
   }
 
   function getCommunityOwnerKey() {
@@ -2495,8 +2647,8 @@
   }
 
   async function publishLevelImmediately(level) {
-    if (!hasSupabaseCommunityConfig()) {
-      window.alert("Global publishing is not configured yet. Add your Supabase URL and anon key in community-config.js.");
+    if (!hasSupabaseCommunityConfig() && !hasMantleCommunityConfig()) {
+      window.alert("Global publishing is not configured yet.");
       return false;
     }
 
