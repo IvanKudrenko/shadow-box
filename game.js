@@ -8,6 +8,11 @@
   const COMMUNITY_MANIFEST_PATH = "community-levels/community-levels.json";
   const COMMUNITY_TABLE = "community_levels";
   const MANTLE_BASE_URL = "https://mantledb.sh";
+  const DEFAULT_SETTINGS = {
+    motionEffects: true,
+    touchControls: true,
+    levelHints: true
+  };
   const DEBUG_SHADOW_HITBOX = false;
 
   const LIGHT_CORE_RADIUS = 70;
@@ -111,6 +116,14 @@
     builderButton: document.getElementById("builderButton"),
     customLevelsButton: document.getElementById("customLevelsButton"),
     communityLevelsButton: document.getElementById("communityLevelsButton"),
+    settingsButton: document.getElementById("settingsButton"),
+    settingsOverlay: document.getElementById("settingsOverlay"),
+    settingsCloseButton: document.getElementById("settingsCloseButton"),
+    motionToggle: document.getElementById("motionToggle"),
+    touchToggle: document.getElementById("touchToggle"),
+    hintsToggle: document.getElementById("hintsToggle"),
+    fullscreenButton: document.getElementById("fullscreenButton"),
+    settingsMessage: document.getElementById("settingsMessage"),
     resetProgressButton: document.getElementById("resetProgressButton"),
     gameBackButton: document.getElementById("gameBackButton"),
     restartButton: document.getElementById("restartButton"),
@@ -173,6 +186,7 @@
 
   bindUi();
   resizeCanvases();
+  applySettings();
   showScreen(SCREENS.MAIN_MENU);
   requestAnimationFrame(gameLoop);
 
@@ -185,7 +199,22 @@
     ui.builderButton.addEventListener("click", () => openBuilder());
     ui.customLevelsButton.addEventListener("click", () => showScreen(SCREENS.CUSTOM_LEVELS));
     ui.communityLevelsButton.addEventListener("click", () => showScreen(SCREENS.COMMUNITY_LEVELS));
-    ui.resetProgressButton.addEventListener("click", resetProgress);
+    ui.settingsButton.addEventListener("click", openSettings);
+    ui.settingsCloseButton.addEventListener("click", closeSettings);
+    ui.settingsOverlay.addEventListener("click", (event) => {
+      if (event.target === ui.settingsOverlay) {
+        closeSettings();
+      }
+    });
+    ui.motionToggle.addEventListener("change", () => updateSetting("motionEffects", ui.motionToggle.checked));
+    ui.touchToggle.addEventListener("change", () => updateSetting("touchControls", ui.touchToggle.checked));
+    ui.hintsToggle.addEventListener("change", () => updateSetting("levelHints", ui.hintsToggle.checked));
+    ui.fullscreenButton.addEventListener("click", toggleFullscreen);
+    ui.resetProgressButton.addEventListener("click", () => {
+      if (resetProgress()) {
+        closeSettings();
+      }
+    });
     ui.restartButton.addEventListener("click", restartCurrentLevel);
     ui.gameBackButton.addEventListener("click", leaveGameplay);
     ui.testLevelButton.addEventListener("click", testBuilderLevel);
@@ -204,6 +233,7 @@
     ui.importJsonButton.addEventListener("click", importCustomLevelFromText);
     ui.importFileInput.addEventListener("change", importCustomLevelFromFile);
     ui.refreshCommunityButton.addEventListener("click", () => loadCommunityLevels(true));
+    document.addEventListener("fullscreenchange", updateFullscreenButton);
 
     document.querySelectorAll("[data-screen]").forEach((button) => {
       button.addEventListener("click", () => showScreen(button.dataset.screen));
@@ -260,7 +290,8 @@
       completedLevels: {},
       customLevels: [],
       publishedLevels: [],
-      publishedRemoteIds: []
+      publishedRemoteIds: [],
+      settings: { ...DEFAULT_SETTINGS }
     };
   }
 
@@ -281,7 +312,17 @@
       completedLevels: safe.completedLevels && typeof safe.completedLevels === "object" ? safe.completedLevels : {},
       customLevels: Array.isArray(safe.customLevels) ? safe.customLevels.map(normalizeCustomLevel).filter(Boolean) : [],
       publishedLevels: Array.isArray(safe.publishedLevels) ? safe.publishedLevels.map(normalizeCustomLevel).filter(Boolean) : [],
-      publishedRemoteIds: Array.isArray(safe.publishedRemoteIds) ? safe.publishedRemoteIds.map(String).filter(Boolean) : []
+      publishedRemoteIds: Array.isArray(safe.publishedRemoteIds) ? safe.publishedRemoteIds.map(String).filter(Boolean) : [],
+      settings: normalizeSettings(safe.settings)
+    };
+  }
+
+  function normalizeSettings(settings) {
+    const safe = settings && typeof settings === "object" ? settings : {};
+    return {
+      motionEffects: safe.motionEffects !== false,
+      touchControls: safe.touchControls !== false,
+      levelHints: safe.levelHints !== false
     };
   }
 
@@ -291,19 +332,70 @@
 
   function resetProgress() {
     if (!window.confirm("Clear built-in level progress? Custom levels will stay saved.")) {
-      return;
+      return false;
     }
 
     saveData = {
       ...defaultSaveData(),
       customLevels: saveData.customLevels,
       publishedLevels: saveData.publishedLevels,
-      publishedRemoteIds: saveData.publishedRemoteIds
+      publishedRemoteIds: saveData.publishedRemoteIds,
+      settings: saveData.settings
     };
     saveProgress();
     renderLevelSelect();
     renderCustomLevels();
     showScreen(SCREENS.MAIN_MENU);
+    return true;
+  }
+
+  function openSettings() {
+    syncSettingsControls();
+    ui.settingsMessage.textContent = "";
+    ui.settingsOverlay.hidden = false;
+    ui.settingsCloseButton.focus();
+  }
+
+  function closeSettings() {
+    ui.settingsOverlay.hidden = true;
+  }
+
+  function syncSettingsControls() {
+    ui.motionToggle.checked = saveData.settings.motionEffects;
+    ui.touchToggle.checked = saveData.settings.touchControls;
+    ui.hintsToggle.checked = saveData.settings.levelHints;
+    updateFullscreenButton();
+  }
+
+  function updateSetting(key, value) {
+    saveData.settings[key] = Boolean(value);
+    saveProgress();
+    applySettings();
+    syncSettingsControls();
+    ui.settingsMessage.textContent = "Saved.";
+  }
+
+  function applySettings() {
+    saveData.settings = normalizeSettings(saveData.settings);
+    document.body.classList.toggle("is-reduced-motion", !saveData.settings.motionEffects);
+    document.body.classList.toggle("is-touch-disabled", !saveData.settings.touchControls);
+  }
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+      updateFullscreenButton();
+    } catch (error) {
+      ui.settingsMessage.textContent = "Fullscreen is not available in this browser.";
+    }
+  }
+
+  function updateFullscreenButton() {
+    ui.fullscreenButton.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
   }
 
   function createBuiltInLevels() {
@@ -866,7 +958,7 @@
     keys.clear();
     resetTouchControl();
     hideOverlay();
-    setMessage(currentLevel.hint, 150);
+    setMessage(saveData.settings.levelHints ? currentLevel.hint : "", saveData.settings.levelHints ? 150 : 0);
     updateHud();
   }
 
@@ -902,6 +994,11 @@
   }
 
   function onKeyDown(event) {
+    if (!ui.settingsOverlay.hidden && keyMatches(event, ["Escape"])) {
+      closeSettings();
+      return;
+    }
+
     if (isTextEntryTarget(event.target)) {
       return;
     }
@@ -987,7 +1084,7 @@
   }
 
   function canUseTouchGameplay() {
-    return activeScreen === SCREENS.PLAYING && playState === PLAY_STATES.PLAYING;
+    return saveData.settings.touchControls && activeScreen === SCREENS.PLAYING && playState === PLAY_STATES.PLAYING;
   }
 
   function resetTouchControl() {
@@ -1005,7 +1102,9 @@
   }
 
   function update(delta) {
-    animationTime += delta;
+    if (saveData.settings.motionEffects) {
+      animationTime += delta;
+    }
     updateMessageTimer(delta);
     updateStarAnimations(delta);
     updatePlayerAnimation(delta);
