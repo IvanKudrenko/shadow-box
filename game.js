@@ -57,7 +57,7 @@
     shadowMinWidth: 22,
     shadowMaxWidth: 55,
     shadowCollectionRadius: 20,
-    shadowCollectionStart: 0.35
+    shadowCollectionStart: 0.02
   };
 
   const ASSET_SOURCES = {
@@ -1342,8 +1342,9 @@
     const toCircleX = circle.x - shadow.startX;
     const toCircleY = circle.y - shadow.startY;
     const projected = (toCircleX * shadow.dirX + toCircleY * shadow.dirY) / shadow.length;
+    const startOverlapAllowance = (circle.r + 4) / shadow.length;
 
-    if (projected < minProjected || projected > 1.08) {
+    if (projected < minProjected - startOverlapAllowance || projected > 1.08) {
       return false;
     }
 
