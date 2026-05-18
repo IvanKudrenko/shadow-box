@@ -1060,13 +1060,14 @@ canvas {
 
 .builder-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 380px) minmax(320px, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(300px, 420px) minmax(260px, 340px);
+  gap: 16px;
+  justify-content: center;
   align-items: start;
 }
 
 .builder-canvas-wrap {
-  width: min(380px, 100%, calc((100vh - 190px) * 0.6));
+  width: min(420px, 100%, calc((100vh - 180px) * 0.6));
   aspect-ratio: 3 / 5;
   overflow: hidden;
   border: 1px solid rgba(255, 163, 117, 0.18);
@@ -1080,6 +1081,13 @@ canvas {
   padding: 16px;
 }
 
+.builder-panel {
+  border: 1px solid rgba(255, 163, 117, 0.14);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(10, 10, 14, 0.78), rgba(0, 0, 0, 0.5));
+}
+
 .field-label {
   display: block;
   margin: 12px 0 6px;
@@ -1089,18 +1097,39 @@ canvas {
   text-transform: uppercase;
 }
 
-.tool-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+.toolbox {
   margin-top: 14px;
 }
 
+.toolbox-title {
+  margin: 0 0 8px;
+  color: var(--orange-soft);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.toolbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
 .tool-button {
-  min-height: 42px;
-  padding: 0 8px;
-  font-size: 0.62rem;
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #f9e7de;
+  font-size: 0.68rem;
   line-height: 1.1;
+  text-align: left;
+  text-transform: none;
+  cursor: grab;
 }
 
 .tool-button.is-active {
@@ -1108,6 +1137,96 @@ canvas {
   background: rgba(125, 216, 255, 0.16);
   color: #ffffff;
   box-shadow: 0 0 18px rgba(125, 216, 255, 0.1);
+}
+
+.tool-button:active {
+  cursor: grabbing;
+}
+
+.tool-preview {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+}
+
+.tool-preview-player {
+  background: url("main sprite.svg") center / 24px 24px no-repeat;
+  transform: rotate(-12deg);
+}
+
+.tool-preview-light {
+  border: 5px solid rgba(255, 255, 255, 0.72);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.54);
+}
+
+.tool-preview-platform,
+.tool-preview-moving {
+  height: 16px;
+  border-radius: 999px;
+  background: #28aaff;
+  box-shadow: 0 0 12px rgba(40, 170, 255, 0.5);
+}
+
+.tool-preview-moving::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  width: 22px;
+  height: 1px;
+  border-bottom: 1px dashed rgba(125, 216, 255, 0.82);
+}
+
+.tool-preview-star {
+  background: url("star.svg") center / 24px 24px no-repeat;
+  filter: drop-shadow(0 0 8px rgba(255, 230, 86, 0.82));
+}
+
+.tool-preview-door {
+  background: url("door.svg") center / 20px 30px no-repeat;
+  filter: drop-shadow(0 0 7px rgba(138, 77, 255, 0.5));
+}
+
+.tool-preview-hazard {
+  background: url("hazard sprite.png") center / 24px 24px no-repeat;
+  filter: drop-shadow(0 0 7px rgba(255, 85, 0, 0.58));
+}
+
+.tool-preview-shadow::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.84);
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(125, 216, 255, 0.38);
+}
+
+.tool-preview-shadow::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 2px;
+  background: rgba(125, 216, 255, 0.82);
+  transform: rotate(45deg);
+}
+
+.platform-size-field[hidden] {
+  display: none;
+}
+
+#builderCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#builderCanvas.is-drop-target {
+  outline: 2px solid rgba(255, 85, 0, 0.78);
+  outline-offset: -5px;
 }
 
 .builder-actions,
@@ -1118,13 +1237,14 @@ canvas {
 }
 
 .builder-actions {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .builder-actions button {
-  min-height: 44px;
-  padding: 0 8px;
-  font-size: 0.64rem;
+  min-height: 36px;
+  padding: 0 7px;
+  border-radius: 8px;
+  font-size: 0.56rem;
 }
 
 .panel-message {
@@ -1292,7 +1412,6 @@ canvas {
     font-size: 0.66rem;
   }
 
-  .tool-grid,
   .builder-actions,
   .card-actions {
     grid-template-columns: 1fr;

@@ -134,10 +134,12 @@
     builderMessage: document.getElementById("builderMessage"),
     customMessage: document.getElementById("customMessage"),
     communityMessage: document.getElementById("communityMessage"),
+    platformSizeField: document.getElementById("platformSizeField"),
     platformSize: document.getElementById("platformSize"),
     testLevelButton: document.getElementById("testLevelButton"),
     saveLevelButton: document.getElementById("saveLevelButton"),
     publishLevelButton: document.getElementById("publishLevelButton"),
+    deleteSelectionButton: document.getElementById("deleteSelectionButton"),
     clearBuilderButton: document.getElementById("clearBuilderButton"),
     importExportText: document.getElementById("importExportText"),
     importJsonButton: document.getElementById("importJsonButton"),
@@ -220,11 +222,13 @@
     ui.testLevelButton.addEventListener("click", testBuilderLevel);
     ui.saveLevelButton.addEventListener("click", saveBuilderLevel);
     ui.publishLevelButton.addEventListener("click", publishBuilderLevel);
+    ui.deleteSelectionButton.addEventListener("click", deleteSelectedBuilderObject);
     ui.clearBuilderButton.addEventListener("click", () => {
       if (window.confirm("Clear the current builder level?")) {
         builderLevel = createEmptyBuilderLevel();
         builderEditingId = null;
         builderSelected = null;
+        updateBuilderControls();
         ui.customLevelName.value = builderLevel.name;
         setBuilderMessage("Builder cleared.");
         drawBuilder();
@@ -241,10 +245,17 @@
 
     document.querySelectorAll(".tool-button").forEach((button) => {
       button.addEventListener("click", () => setBuilderTool(button.dataset.tool));
+      button.addEventListener("dragstart", onBuilderToolDragStart);
+      button.addEventListener("dragend", () => {
+        builderCanvas.classList.remove("is-drop-target");
+      });
     });
 
     builderCanvas.addEventListener("mousedown", onBuilderMouseDown);
     builderCanvas.addEventListener("mousemove", onBuilderMouseMove);
+    builderCanvas.addEventListener("dragover", onBuilderCanvasDragOver);
+    builderCanvas.addEventListener("dragleave", () => builderCanvas.classList.remove("is-drop-target"));
+    builderCanvas.addEventListener("drop", onBuilderCanvasDrop);
     window.addEventListener("mouseup", () => {
       builderDragging = false;
     });
@@ -1802,8 +1813,8 @@
 
     ui.customLevelName.value = builderLevel.name;
     builderSelected = null;
-    setBuilderTool("select");
-    setBuilderMessage("Select a tool, then click the canvas.");
+    setBuilderTool("playerStart");
+    setBuilderMessage("Drag from the toolbox onto the grid. Click existing objects to move or delete them.");
     showScreen(SCREENS.LEVEL_BUILDER);
   }
 
@@ -1828,6 +1839,18 @@
     document.querySelectorAll(".tool-button").forEach((button) => {
       button.classList.toggle("is-active", button.dataset.tool === tool);
     });
+    updateBuilderControls();
+  }
+
+  function updateBuilderControls() {
+    const selectionType = builderSelected?.type || "";
+    const usesPlatformSize =
+      builderTool === "platform" ||
+      builderTool === "movingPlatform" ||
+      selectionType === "platforms" ||
+      selectionType === "movingPlatforms";
+    ui.platformSizeField.hidden = !usesPlatformSize;
+    ui.deleteSelectionButton.disabled = !builderSelected;
   }
 
   function getCanvasPoint(event, targetCanvas) {
@@ -1840,22 +1863,23 @@
 
   function onBuilderMouseDown(event) {
     const pointData = getCanvasPoint(event, builderCanvas);
+    const existingSelection = findBuilderObject(pointData);
 
-    if (builderTool === "select") {
-      builderSelected = findBuilderObject(pointData);
+    if (existingSelection) {
+      builderSelected = existingSelection;
       builderDragging = Boolean(builderSelected);
+      updateBuilderControls();
       drawBuilder();
       return;
     }
 
-    if (builderTool === "delete") {
-      builderSelected = findBuilderObject(pointData);
-      deleteSelectedBuilderObject();
+    if (!builderTool) {
       return;
     }
 
-    placeBuilderObject(pointData);
-    builderDragging = true;
+    placeBuilderObject(pointData, builderTool);
+    builderDragging = Boolean(builderSelected);
+    updateBuilderControls();
     drawBuilder();
   }
 
@@ -1869,37 +1893,70 @@
     drawBuilder();
   }
 
-  function placeBuilderObject(pointData) {
-    if (builderTool === "playerStart") {
+  function onBuilderToolDragStart(event) {
+    const tool = event.currentTarget.dataset.tool;
+    setBuilderTool(tool);
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData("text/plain", tool);
+    event.dataTransfer.setData("application/x-shadow-box-tool", tool);
+    builderCanvas.classList.add("is-drop-target");
+  }
+
+  function onBuilderCanvasDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    builderCanvas.classList.add("is-drop-target");
+  }
+
+  function onBuilderCanvasDrop(event) {
+    event.preventDefault();
+    builderCanvas.classList.remove("is-drop-target");
+    const tool = event.dataTransfer.getData("application/x-shadow-box-tool") || event.dataTransfer.getData("text/plain");
+    if (!tool) {
+      return;
+    }
+
+    const pointData = getCanvasPoint(event, builderCanvas);
+    setBuilderTool(tool);
+    placeBuilderObject(pointData, tool);
+    builderDragging = false;
+    updateBuilderControls();
+    drawBuilder();
+  }
+
+  function placeBuilderObject(pointData, tool = builderTool) {
+    if (tool === "playerStart") {
       builderLevel.playerStart = pointData;
       builderSelected = { type: "playerStart" };
-    } else if (builderTool === "light") {
+    } else if (tool === "light") {
       builderLevel.light = { ...pointData, radius: LIGHT_OUTER_RADIUS };
       builderSelected = { type: "light" };
-    } else if (builderTool === "door") {
+    } else if (tool === "door") {
       builderLevel.door = { x: pointData.x - 19, y: pointData.y - 57 };
       builderSelected = { type: "door" };
-    } else if (builderTool === "star") {
+    } else if (tool === "star") {
       if (builderLevel.stars.length >= 3) {
         setBuilderMessage("Custom levels can have at most 3 stars.");
         return;
       }
       builderLevel.stars.push({ ...pointData, r: 13 });
       builderSelected = { type: "stars", index: builderLevel.stars.length - 1 };
-    } else if (builderTool === "platform") {
+    } else if (tool === "platform") {
       const size = platformPreset(ui.platformSize.value);
       builderLevel.platforms.push({ x: pointData.x - size.width / 2, y: pointData.y, ...size });
       builderSelected = { type: "platforms", index: builderLevel.platforms.length - 1 };
-    } else if (builderTool === "movingPlatform") {
-      builderLevel.movingPlatforms.push({ x: pointData.x - 55, y: pointData.y, width: 110, height: 12, range: 80, speed: 0.7, axis: "x" });
+    } else if (tool === "movingPlatform") {
+      const size = platformPreset(ui.platformSize.value);
+      builderLevel.movingPlatforms.push({ x: pointData.x - size.width / 2, y: pointData.y, ...size, range: 80, speed: 0.7, axis: "x" });
       builderSelected = { type: "movingPlatforms", index: builderLevel.movingPlatforms.length - 1 };
-    } else if (builderTool === "hazard") {
+    } else if (tool === "hazard") {
       builderLevel.hazards.push({ ...pointData, r: 18 });
       builderSelected = { type: "hazards", index: builderLevel.hazards.length - 1 };
-    } else if (builderTool === "shadowDanger") {
+    } else if (tool === "shadowDanger") {
       builderLevel.shadowDangerZones.push({ ...pointData, r: 20 });
       builderSelected = { type: "shadowDangerZones", index: builderLevel.shadowDangerZones.length - 1 };
     }
+    updateBuilderControls();
   }
 
   function platformPreset(size) {
@@ -1980,6 +2037,7 @@
 
     builderSelected = null;
     setBuilderMessage("Deleted.");
+    updateBuilderControls();
     drawBuilder();
   }
 

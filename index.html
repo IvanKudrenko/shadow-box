@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shadow Box</title>
-  <link rel="stylesheet" href="style.css?v=20260516-8">
+  <link rel="stylesheet" href="style.css?v=20260518-1">
 </head>
 <body>
   <main class="app-shell">
@@ -134,30 +134,58 @@
           <label class="field-label" for="customLevelName">Level name</label>
           <input id="customLevelName" type="text" maxlength="40" value="My Level">
 
-          <div class="tool-grid" aria-label="Builder tools">
-            <button class="tool-button is-active" data-tool="select" type="button">Select</button>
-            <button class="tool-button" data-tool="playerStart" type="button">Player Start</button>
-            <button class="tool-button" data-tool="light" type="button">Light</button>
-            <button class="tool-button" data-tool="platform" type="button">Platform</button>
-            <button class="tool-button" data-tool="star" type="button">Star</button>
-            <button class="tool-button" data-tool="door" type="button">Door</button>
-            <button class="tool-button" data-tool="hazard" type="button">Hazard</button>
-            <button class="tool-button" data-tool="shadowDanger" type="button">Shadow Danger</button>
-            <button class="tool-button" data-tool="movingPlatform" type="button">Moving Platform</button>
-            <button class="tool-button" data-tool="delete" type="button">Delete</button>
+          <div class="toolbox" aria-label="Builder toolbox">
+            <p class="toolbox-title">Toolbox</p>
+            <div class="toolbox-grid">
+              <button class="tool-button is-active" data-tool="playerStart" draggable="true" type="button">
+                <span class="tool-preview tool-preview-player" aria-hidden="true"></span>
+                <span>Player Start</span>
+              </button>
+              <button class="tool-button" data-tool="light" draggable="true" type="button">
+                <span class="tool-preview tool-preview-light" aria-hidden="true"></span>
+                <span>Light</span>
+              </button>
+              <button class="tool-button" data-tool="platform" draggable="true" type="button">
+                <span class="tool-preview tool-preview-platform" aria-hidden="true"></span>
+                <span>Platform</span>
+              </button>
+              <button class="tool-button" data-tool="star" draggable="true" type="button">
+                <span class="tool-preview tool-preview-star" aria-hidden="true"></span>
+                <span>Star</span>
+              </button>
+              <button class="tool-button" data-tool="door" draggable="true" type="button">
+                <span class="tool-preview tool-preview-door" aria-hidden="true"></span>
+                <span>Door</span>
+              </button>
+              <button class="tool-button" data-tool="hazard" draggable="true" type="button">
+                <span class="tool-preview tool-preview-hazard" aria-hidden="true"></span>
+                <span>Hazard</span>
+              </button>
+              <button class="tool-button" data-tool="shadowDanger" draggable="true" type="button">
+                <span class="tool-preview tool-preview-shadow" aria-hidden="true"></span>
+                <span>Shadow Danger</span>
+              </button>
+              <button class="tool-button" data-tool="movingPlatform" draggable="true" type="button">
+                <span class="tool-preview tool-preview-moving" aria-hidden="true"></span>
+                <span>Moving Platform</span>
+              </button>
+            </div>
           </div>
 
-          <label class="field-label" for="platformSize">Platform size</label>
-          <select id="platformSize">
-            <option value="small">Small</option>
-            <option value="medium" selected>Medium</option>
-            <option value="large">Large</option>
-          </select>
+          <div id="platformSizeField" class="platform-size-field" hidden>
+            <label class="field-label" for="platformSize">Platform size</label>
+            <select id="platformSize">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
 
           <div class="builder-actions">
             <button id="testLevelButton" type="button">Test Level</button>
             <button id="saveLevelButton" class="primary-button" type="button">Save Level</button>
             <button id="publishLevelButton" class="publish-button" type="button">Publish</button>
+            <button id="deleteSelectionButton" class="danger-text-button" type="button" title="Delete selected object">Delete</button>
             <button id="clearBuilderButton" type="button">Clear</button>
           </div>
           <p id="builderMessage" class="panel-message" aria-live="polite"></p>
@@ -215,7 +243,7 @@
     </section>
   </main>
 
-  <script src="community-config.js?v=20260516-8"></script>
-  <script src="game.js?v=20260516-8"></script>
+  <script src="community-config.js?v=20260518-1"></script>
+  <script src="game.js?v=20260518-1"></script>
 </body>
 </html>
