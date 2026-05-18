@@ -884,13 +884,13 @@
       card.classList.toggle("is-current", unlocked && index === saveData.unlockedLevels - 1 && !completed);
       card.classList.toggle("is-complete", completed);
       card.innerHTML = `
-        <div>
+        <div class="level-tile-main">
           <div class="level-number">${level.id}</div>
           <div class="level-name">${level.name}</div>
         </div>
-        <div>
+        <div class="level-tile-meta">
           <div class="star-row">${starDisplay(bestStars)}</div>
-          <div class="lock-text">${unlocked ? `${bestStars}/3 stars` : '<span class="lock-icon" aria-hidden="true"></span>Locked'}</div>
+          <div class="lock-text">${unlocked ? '<span class="play-chip">Play</span>' : '<span class="lock-icon" aria-hidden="true"></span>Locked'}</div>
         </div>
       `;
       card.addEventListener("click", () => startBuiltInLevel(index));
@@ -2208,9 +2208,12 @@
     saveData.customLevels.forEach((level) => {
       const card = document.createElement("article");
       card.className = "custom-card";
+      const platformCount = level.platforms.length + level.movingPlatforms.length;
       card.innerHTML = `
-        <h3>${escapeHtml(level.name)}</h3>
-        <p>${level.stars.length} star${level.stars.length === 1 ? "" : "s"} · ${level.platforms.length + level.movingPlatforms.length} platform${level.platforms.length + level.movingPlatforms.length === 1 ? "" : "s"}</p>
+        <div class="tile-copy">
+          <h3>${escapeHtml(level.name)}</h3>
+          <p><span class="star-count">${level.stars.length}★</span> · ${platformCount} platform${platformCount === 1 ? "" : "s"}</p>
+        </div>
         <div class="card-actions"></div>
       `;
       const actions = card.querySelector(".card-actions");
@@ -2272,12 +2275,14 @@
       const card = document.createElement("article");
       card.className = "custom-card community-card";
       card.innerHTML = `
-        <div class="community-card-header">
-          <h3>${escapeHtml(entry.name)}</h3>
+        <div class="tile-copy">
+          <div class="community-card-header">
+            <h3>${escapeHtml(entry.name)}</h3>
+          </div>
           <span class="difficulty-badge">${escapeHtml(entry.difficulty)}</span>
+          <p class="community-author">By ${escapeHtml(entry.author)}</p>
+          <p>${escapeHtml(entry.description)}</p>
         </div>
-        <p class="community-author">By ${escapeHtml(entry.author)}</p>
-        <p>${escapeHtml(entry.description)}</p>
         <div class="card-actions"></div>
       `;
       const actions = card.querySelector(".card-actions");
