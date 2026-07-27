@@ -1,6 +1,38 @@
 {
   "levels": [
     {
+      "id": "recovered-my-level",
+      "name": "My Level",
+      "author": "Shadow Box Player",
+      "difficulty": "Community",
+      "description": "Recovered from the published Shadow Box save data.",
+      "file": "recovered-my-level.json"
+    },
+    {
+      "id": "recovered-test-level",
+      "name": "test level",
+      "author": "Shadow Box Player",
+      "difficulty": "Community",
+      "description": "Recovered from the published Shadow Box save data.",
+      "file": "recovered-test-level.json"
+    },
+    {
+      "id": "recovered-my-level-1",
+      "name": "My Level1",
+      "author": "Shadow Box Player",
+      "difficulty": "Community",
+      "description": "Recovered from the original local Shadow Box save data.",
+      "file": "recovered-my-level-1.json"
+    },
+    {
+      "id": "recovered-my-level-2",
+      "name": "My Level2",
+      "author": "Shadow Box Player",
+      "difficulty": "Community",
+      "description": "Recovered from the original local Shadow Box save data.",
+      "file": "recovered-my-level-2.json"
+    },
+    {
       "id": "mirror-steps",
       "name": "Mirror Steps",
       "author": "Shadow Box Team",
